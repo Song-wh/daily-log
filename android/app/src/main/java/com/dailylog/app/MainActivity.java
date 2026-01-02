@@ -32,7 +32,7 @@ public class MainActivity extends BridgeActivity {
     };
     
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
         // 브로드캐스트 리시버 등록
@@ -65,7 +65,7 @@ public class MainActivity extends BridgeActivity {
     }
     
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         super.onDestroy();
         unregisterReceiver(transactionReceiver);
         transactionListener = null;
