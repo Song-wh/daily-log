@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build outputs
+dist/
+build/
+
+# Android build files
+android/app/build/
+android/.gradle/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+*.apk
+*.aab
+*.keystore
+
+# iOS (if added later)
+ios/App/Pods/
+ios/App/build/
+
+# Capacitor
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.local

@@ -1,0 +1,17 @@
+/* Import Pretendard Font */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+:root {
+  font-family: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #0a0a0f;
+  min-height: 100vh;
+}
+
+/* Status bar area for Android */
+html {
+  background: #0a0a0f;
+}
