@@ -29,37 +29,26 @@ jobs:
     
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: '11076708'
-    
-    - name: Accept Android SDK Licenses
-      run: yes | sdkmanager --licenses || true
-    
-    - name: Install Android SDK components
-      run: |
-        sdkmanager "platforms;android-34" "build-tools;34.0.0"
     
     - name: Install dependencies
-      run: npm ci
+      run: npm ci || npm install
     
     - name: Build web app
       run: npm run build
     
-    - name: Sync Capacitor
-      run: npx cap sync android
+    - name: Copy web assets to android
+      run: npx cap copy android
+    
+    - name: Update android plugins
+      run: npx cap update android
     
     - name: Make gradlew executable
       run: chmod +x android/gradlew
     
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-    
     - name: Build Debug APK
       run: |
         cd android
-        ./gradlew assembleDebug --no-daemon --stacktrace
-      env:
-        ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        ./gradlew assembleDebug --no-daemon
     
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
