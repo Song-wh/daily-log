@@ -18,6 +18,8 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [notificationStatus, setNotificationStatus] = useState('unknown')
   const [reportSettings, setReportSettings] = useState({ enabled: false, hour: 22, minute: 0 })
+  const [showPermissionModal, setShowPermissionModal] = useState(false)
+  const [permissionCheckCount, setPermissionCheckCount] = useState(0)
 
   // Load transactions from storage
   useEffect(() => {
@@ -27,7 +29,19 @@ function App() {
     
     // Listen for new transactions from native layer
     window.addEventListener('newTransaction', handleNewTransaction)
-    return () => window.removeEventListener('newTransaction', handleNewTransaction)
+    
+    // 앱이 다시 포커스될 때 권한 재확인
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkNotificationPermission()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      window.removeEventListener('newTransaction', handleNewTransaction)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   const initNotifications = async () => {
@@ -68,17 +82,38 @@ function App() {
   const checkNotificationPermission = async () => {
     // Will be implemented in native layer
     if (window.NotificationListener) {
-      const status = await window.NotificationListener.checkPermission()
-      setNotificationStatus(status)
+      const hasPermission = await window.NotificationListener.checkPermission()
+      setNotificationStatus(hasPermission ? 'granted' : 'denied')
+      
+      // 권한이 없으면 모달 표시
+      if (!hasPermission) {
+        setShowPermissionModal(true)
+      } else {
+        setShowPermissionModal(false)
+      }
     }
   }
 
   const requestNotificationPermission = async () => {
     if (window.NotificationListener) {
       await window.NotificationListener.requestPermission()
-      checkNotificationPermission()
+      // 설정 화면 갔다가 돌아오면 자동으로 체크됨 (visibilitychange 이벤트)
     } else {
-      alert('알림 권한 설정을 위해 앱 설정으로 이동합니다.')
+      alert('이 기능은 Android 앱에서만 사용 가능합니다.')
+    }
+  }
+
+  const handlePermissionLater = async () => {
+    // "나중에" 선택 시 카운트 증가
+    setPermissionCheckCount(prev => prev + 1)
+    
+    // 3번까지는 나중에 선택 가능, 그 이후로는 계속 표시
+    if (permissionCheckCount < 3) {
+      setShowPermissionModal(false)
+      // 5초 후 다시 체크
+      setTimeout(() => {
+        checkNotificationPermission()
+      }, 5000)
     }
   }
 
@@ -278,6 +313,15 @@ function App() {
         <AddTransactionModal 
           onClose={() => setShowAddModal(false)}
           onAdd={addTransaction}
+        />
+      )}
+
+      {/* Permission Required Modal */}
+      {showPermissionModal && (
+        <PermissionModal 
+          onAllow={requestNotificationPermission}
+          onLater={handlePermissionLater}
+          canSkip={permissionCheckCount < 3}
         />
       )}
 
@@ -589,6 +633,56 @@ function AddTransactionModal({ onClose, onAdd }) {
           </div>
           <button type="submit" className="submit-btn">저장</button>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// Permission Modal Component
+function PermissionModal({ onAllow, onLater, canSkip }) {
+  return (
+    <div className="permission-overlay">
+      <div className="permission-modal">
+        <div className="permission-icon">🔔</div>
+        <h2>알림 접근 권한이 필요해요</h2>
+        <p>
+          삼성페이, 카드 결제 알림을 자동으로 수집하려면
+          <strong> 알림 접근 권한</strong>이 필요합니다.
+        </p>
+        
+        <div className="permission-features">
+          <div className="feature-item">
+            <span className="feature-icon">💳</span>
+            <span>삼성페이 결제 자동 기록</span>
+          </div>
+          <div className="feature-item">
+            <span className="feature-icon">🏦</span>
+            <span>카드사 알림 자동 수집</span>
+          </div>
+          <div className="feature-item">
+            <span className="feature-icon">📊</span>
+            <span>실시간 소비 분석</span>
+          </div>
+        </div>
+
+        <div className="permission-note">
+          <span>🔒</span>
+          <span>결제 정보는 기기에만 저장되며, 외부로 전송되지 않습니다.</span>
+        </div>
+
+        <button className="permission-allow-btn" onClick={onAllow}>
+          권한 설정하러 가기
+        </button>
+        
+        {canSkip ? (
+          <button className="permission-later-btn" onClick={onLater}>
+            나중에 하기
+          </button>
+        ) : (
+          <p className="permission-required-text">
+            앱 사용을 위해 권한이 필요합니다
+          </p>
+        )}
       </div>
     </div>
   )
