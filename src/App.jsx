@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { format, isToday, isYesterday, parseISO, startOfDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import localforage from 'localforage'
+import NotificationService from './services/NotificationService'
 import './App.css'
 
 // Initialize localforage
@@ -16,16 +17,24 @@ function App() {
   const [view, setView] = useState('home') // home, calendar, stats, settings
   const [showAddModal, setShowAddModal] = useState(false)
   const [notificationStatus, setNotificationStatus] = useState('unknown')
+  const [reportSettings, setReportSettings] = useState({ enabled: false, hour: 22, minute: 0 })
 
   // Load transactions from storage
   useEffect(() => {
     loadTransactions()
     checkNotificationPermission()
+    initNotifications()
     
     // Listen for new transactions from native layer
     window.addEventListener('newTransaction', handleNewTransaction)
     return () => window.removeEventListener('newTransaction', handleNewTransaction)
   }, [])
+
+  const initNotifications = async () => {
+    await NotificationService.init()
+    const settings = await NotificationService.getSettings()
+    setReportSettings(settings)
+  }
 
   const loadTransactions = async () => {
     try {
@@ -99,6 +108,25 @@ function App() {
     return getTransactionsForDate(date).reduce((sum, tx) => sum + (tx.amount || 0), 0)
   }
 
+  // Get top category for a date
+  const getTopCategory = (date) => {
+    const txs = getTransactionsForDate(date)
+    const categoryTotals = txs.reduce((acc, tx) => {
+      const cat = tx.category || 'other'
+      acc[cat] = (acc[cat] || 0) + (tx.amount || 0)
+      return acc
+    }, {})
+    
+    const topCat = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]
+    if (!topCat) return null
+    
+    const categoryNames = {
+      food: '식비', cafe: '카페', shopping: '쇼핑', transport: '교통',
+      entertainment: '여가', grocery: '마트', health: '건강', other: '기타'
+    }
+    return categoryNames[topCat[0]] || '기타'
+  }
+
   // Get today's transactions
   const todayTransactions = getTransactionsForDate(new Date())
   const todayTotal = getDailyTotal(new Date())
@@ -140,6 +168,94 @@ function App() {
     return icons[category] || icons.other
   }
 
+  // Render different views
+  const renderView = () => {
+    switch (view) {
+      case 'settings':
+        return (
+          <SettingsView 
+            reportSettings={reportSettings}
+            setReportSettings={setReportSettings}
+            todayTotal={todayTotal}
+            todayCount={todayTransactions.length}
+            topCategory={getTopCategory(new Date())}
+            requestNotificationPermission={requestNotificationPermission}
+          />
+        )
+      case 'stats':
+        return <StatsView transactions={transactions} formatMoney={formatMoney} />
+      default:
+        return (
+          <>
+            {/* Today Summary Card */}
+            <div className="summary-card">
+              <div className="summary-date">
+                {format(new Date(), 'M월 d일 EEEE', { locale: ko })}
+              </div>
+              <div className="summary-amount">
+                <span className="currency">₩</span>
+                <span className="amount">{formatMoney(todayTotal)}</span>
+              </div>
+              <div className="summary-count">
+                오늘 {todayTransactions.length}건 결제
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="quick-actions">
+              <button className="action-btn primary" onClick={() => setShowAddModal(true)}>
+                <span className="icon">➕</span>
+                <span>직접 입력</span>
+              </button>
+              <button className="action-btn" onClick={requestNotificationPermission}>
+                <span className="icon">🔔</span>
+                <span>알림 설정</span>
+              </button>
+            </div>
+
+            {/* Transaction List */}
+            <div className="transaction-list">
+              {Object.keys(groupedTransactions)
+                .sort((a, b) => b.localeCompare(a))
+                .map(dateStr => (
+                  <div key={dateStr} className="transaction-group">
+                    <div className="date-header">
+                      <span>{formatDateHeader(dateStr)}</span>
+                      <span className="date-total">
+                        ₩{formatMoney(groupedTransactions[dateStr].reduce((s, t) => s + (t.amount || 0), 0))}
+                      </span>
+                    </div>
+                    {groupedTransactions[dateStr].map(tx => (
+                      <div key={tx.id} className="transaction-item">
+                        <div className="tx-icon">{getCategoryIcon(tx.category)}</div>
+                        <div className="tx-details">
+                          <div className="tx-store">{tx.store || '결제'}</div>
+                          <div className="tx-meta">
+                            <span className="tx-time">{formatTime(tx.timestamp)}</span>
+                            {tx.card && <span className="tx-card">{tx.card}</span>}
+                          </div>
+                        </div>
+                        <div className="tx-amount">₩{formatMoney(tx.amount)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              
+              {transactions.length === 0 && (
+                <div className="empty-state">
+                  <div className="empty-icon">📝</div>
+                  <div className="empty-text">아직 기록이 없어요</div>
+                  <div className="empty-hint">
+                    삼성페이 결제 시 자동으로 기록됩니다
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )
+    }
+  }
+
   return (
     <div className="app">
       {/* Header */}
@@ -155,70 +271,7 @@ function App() {
         </div>
       </header>
 
-      {/* Today Summary Card */}
-      <div className="summary-card">
-        <div className="summary-date">
-          {format(new Date(), 'M월 d일 EEEE', { locale: ko })}
-        </div>
-        <div className="summary-amount">
-          <span className="currency">₩</span>
-          <span className="amount">{formatMoney(todayTotal)}</span>
-        </div>
-        <div className="summary-count">
-          오늘 {todayTransactions.length}건 결제
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="action-btn primary" onClick={() => setShowAddModal(true)}>
-          <span className="icon">➕</span>
-          <span>직접 입력</span>
-        </button>
-        <button className="action-btn" onClick={requestNotificationPermission}>
-          <span className="icon">🔔</span>
-          <span>알림 설정</span>
-        </button>
-      </div>
-
-      {/* Transaction List */}
-      <div className="transaction-list">
-        {Object.keys(groupedTransactions)
-          .sort((a, b) => b.localeCompare(a))
-          .map(dateStr => (
-            <div key={dateStr} className="transaction-group">
-              <div className="date-header">
-                <span>{formatDateHeader(dateStr)}</span>
-                <span className="date-total">
-                  ₩{formatMoney(groupedTransactions[dateStr].reduce((s, t) => s + (t.amount || 0), 0))}
-                </span>
-              </div>
-              {groupedTransactions[dateStr].map(tx => (
-                <div key={tx.id} className="transaction-item">
-                  <div className="tx-icon">{getCategoryIcon(tx.category)}</div>
-                  <div className="tx-details">
-                    <div className="tx-store">{tx.store || '결제'}</div>
-                    <div className="tx-meta">
-                      <span className="tx-time">{formatTime(tx.timestamp)}</span>
-                      {tx.card && <span className="tx-card">{tx.card}</span>}
-                    </div>
-                  </div>
-                  <div className="tx-amount">₩{formatMoney(tx.amount)}</div>
-                </div>
-              ))}
-            </div>
-          ))}
-        
-        {transactions.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-icon">📝</div>
-            <div className="empty-text">아직 기록이 없어요</div>
-            <div className="empty-hint">
-              삼성페이 결제 시 자동으로 기록됩니다
-            </div>
-          </div>
-        )}
-      </div>
+      {renderView()}
 
       {/* Add Transaction Modal */}
       {showAddModal && (
@@ -247,6 +300,199 @@ function App() {
           <span className="nav-label">설정</span>
         </button>
       </nav>
+    </div>
+  )
+}
+
+// Settings View Component
+function SettingsView({ reportSettings, setReportSettings, todayTotal, todayCount, topCategory, requestNotificationPermission }) {
+  const [hour, setHour] = useState(reportSettings.hour)
+  const [minute, setMinute] = useState(reportSettings.minute)
+  const [enabled, setEnabled] = useState(reportSettings.enabled)
+  const [saving, setSaving] = useState(false)
+
+  const handleToggle = async () => {
+    setSaving(true)
+    const newEnabled = !enabled
+    
+    if (newEnabled) {
+      const success = await NotificationService.scheduleDailyReport(hour, minute)
+      if (success) {
+        setEnabled(true)
+        setReportSettings({ enabled: true, hour, minute })
+      }
+    } else {
+      await NotificationService.cancelDailyReport()
+      setEnabled(false)
+      setReportSettings({ enabled: false, hour, minute })
+    }
+    
+    setSaving(false)
+  }
+
+  const handleTimeChange = async () => {
+    if (enabled) {
+      setSaving(true)
+      await NotificationService.scheduleDailyReport(hour, minute)
+      setReportSettings({ enabled: true, hour, minute })
+      setSaving(false)
+    }
+  }
+
+  const handleTestNotification = async () => {
+    const success = await NotificationService.sendDailyReport(todayTotal, todayCount, topCategory)
+    if (success) {
+      alert('테스트 알림을 보냈어요! 📱')
+    } else {
+      alert('알림 권한을 먼저 허용해주세요.')
+    }
+  }
+
+  return (
+    <div className="settings-view">
+      <div className="settings-section">
+        <h2>📊 하루 리포트 알림</h2>
+        <p className="settings-desc">매일 정해진 시간에 오늘의 소비 요약을 알려드려요</p>
+        
+        <div className="setting-item">
+          <div className="setting-info">
+            <span className="setting-label">하루 리포트 알림</span>
+            <span className="setting-hint">
+              {enabled ? `매일 ${hour}시 ${minute.toString().padStart(2, '0')}분에 알림` : '꺼짐'}
+            </span>
+          </div>
+          <button 
+            className={`toggle-btn ${enabled ? 'active' : ''}`}
+            onClick={handleToggle}
+            disabled={saving}
+          >
+            <span className="toggle-knob"></span>
+          </button>
+        </div>
+
+        {enabled && (
+          <div className="time-picker">
+            <label>알림 시간</label>
+            <div className="time-inputs">
+              <select 
+                value={hour} 
+                onChange={e => setHour(parseInt(e.target.value))}
+                onBlur={handleTimeChange}
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>{i}시</option>
+                ))}
+              </select>
+              <span>:</span>
+              <select 
+                value={minute} 
+                onChange={e => setMinute(parseInt(e.target.value))}
+                onBlur={handleTimeChange}
+              >
+                {[0, 15, 30, 45].map(m => (
+                  <option key={m} value={m}>{m.toString().padStart(2, '0')}분</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <button className="test-btn" onClick={handleTestNotification}>
+          🔔 테스트 알림 보내기
+        </button>
+      </div>
+
+      <div className="settings-section">
+        <h2>🔐 알림 수집 권한</h2>
+        <p className="settings-desc">삼성페이/카드 알림을 자동으로 수집하려면 권한이 필요해요</p>
+        
+        <button className="setting-action-btn" onClick={requestNotificationPermission}>
+          알림 접근 권한 설정 →
+        </button>
+      </div>
+
+      <div className="settings-section">
+        <h2>ℹ️ 앱 정보</h2>
+        <div className="app-info">
+          <div className="info-row">
+            <span>버전</span>
+            <span>1.0.0</span>
+          </div>
+          <div className="info-row">
+            <span>개발</span>
+            <span>개인 프로젝트</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Stats View Component
+function StatsView({ transactions, formatMoney }) {
+  const now = new Date()
+  const thisMonth = transactions.filter(tx => {
+    const txDate = new Date(tx.timestamp)
+    return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear()
+  })
+
+  const monthlyTotal = thisMonth.reduce((sum, tx) => sum + (tx.amount || 0), 0)
+
+  // Category breakdown
+  const categoryTotals = thisMonth.reduce((acc, tx) => {
+    const cat = tx.category || 'other'
+    acc[cat] = (acc[cat] || 0) + (tx.amount || 0)
+    return acc
+  }, {})
+
+  const categoryNames = {
+    food: { name: '식비', icon: '🍽️' },
+    cafe: { name: '카페', icon: '☕' },
+    shopping: { name: '쇼핑', icon: '🛍️' },
+    transport: { name: '교통', icon: '🚇' },
+    entertainment: { name: '여가', icon: '🎬' },
+    grocery: { name: '마트', icon: '🛒' },
+    health: { name: '건강', icon: '💊' },
+    other: { name: '기타', icon: '💳' }
+  }
+
+  const sortedCategories = Object.entries(categoryTotals)
+    .sort((a, b) => b[1] - a[1])
+
+  return (
+    <div className="stats-view">
+      <div className="stats-card">
+        <h2>{format(now, 'M월')} 총 지출</h2>
+        <div className="stats-total">₩{formatMoney(monthlyTotal)}</div>
+        <div className="stats-count">{thisMonth.length}건 결제</div>
+      </div>
+
+      <div className="category-breakdown">
+        <h3>카테고리별 지출</h3>
+        {sortedCategories.length > 0 ? (
+          sortedCategories.map(([cat, amount]) => {
+            const info = categoryNames[cat] || categoryNames.other
+            const percentage = monthlyTotal > 0 ? (amount / monthlyTotal * 100).toFixed(0) : 0
+            return (
+              <div key={cat} className="category-row">
+                <div className="category-info">
+                  <span className="cat-icon">{info.icon}</span>
+                  <span className="cat-name">{info.name}</span>
+                </div>
+                <div className="category-bar-container">
+                  <div className="category-bar" style={{ width: `${percentage}%` }}></div>
+                </div>
+                <div className="category-amount">
+                  <span className="amount">₩{formatMoney(amount)}</span>
+                  <span className="percentage">{percentage}%</span>
+                </div>
+              </div>
+            )
+          })
+        ) : (
+          <div className="empty-stats">이번 달 기록이 없어요</div>
+        )}
+      </div>
     </div>
   )
 }
