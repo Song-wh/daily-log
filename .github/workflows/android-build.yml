@@ -48,6 +48,24 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x android/gradlew
     
+    # 일관된 서명을 위해 고정된 debug keystore 생성
+    - name: Create consistent debug keystore
+      run: |
+        mkdir -p ~/.android
+        # 기존 keystore 삭제 후 새로 생성 (일관된 서명을 위해)
+        rm -f ~/.android/debug.keystore
+        echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore 2>/dev/null || \
+        keytool -genkeypair -v \
+          -keystore ~/.android/debug.keystore \
+          -storepass android \
+          -alias androiddebugkey \
+          -keypass android \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -dname "CN=DailyLog Debug,O=DailyLog,C=KR" \
+          -noprompt
+    
     - name: Build Debug APK
       run: |
         cd android
