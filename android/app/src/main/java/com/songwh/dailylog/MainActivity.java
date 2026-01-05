@@ -1,4 +1,4 @@
-package com.dailylog.app;
+package com.songwh.dailylog;
 
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;

@@ -1,4 +1,4 @@
-package com.dailylog.app;
+package com.songwh.dailylog;
 
 import android.app.Notification;
 import android.content.Intent;

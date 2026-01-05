@@ -1,5 +1,5 @@
 {
-  "appId": "com.dailylog.app",
-  "appName": "DailyLog",
+  "appId": "com.songwh.dailylog",
+  "appName": "하루기록",
   "webDir": "dist"
 }
