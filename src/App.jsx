@@ -79,31 +79,46 @@ function App() {
     })
   }
 
-  const checkNotificationPermission = async () => {
-    // Will be implemented in native layer
+  const checkNotificationPermission = () => {
+    // Android @JavascriptInterface는 동기적으로 값을 반환
     if (window.NotificationListener) {
-      const hasPermission = await window.NotificationListener.checkPermission()
-      setNotificationStatus(hasPermission ? 'granted' : 'denied')
-      
-      // 권한이 없으면 모달 표시
-      if (!hasPermission) {
-        setShowPermissionModal(true)
-      } else {
+      try {
+        const hasPermission = window.NotificationListener.checkPermission()
+        console.log('Permission check result:', hasPermission, typeof hasPermission)
+        
+        // boolean 또는 string "true"/"false" 처리
+        const isGranted = hasPermission === true || hasPermission === 'true'
+        setNotificationStatus(isGranted ? 'granted' : 'denied')
+        
+        // 권한이 없으면 모달 표시
+        if (!isGranted) {
+          setShowPermissionModal(true)
+        } else {
+          setShowPermissionModal(false)
+        }
+      } catch (e) {
+        console.error('Permission check error:', e)
+        // 에러 시 권한 있다고 가정 (기능 테스트 위해)
+        setNotificationStatus('granted')
         setShowPermissionModal(false)
       }
+    } else {
+      // 브라우저에서는 권한 체크 불필요
+      setNotificationStatus('granted')
+      setShowPermissionModal(false)
     }
   }
 
-  const requestNotificationPermission = async () => {
+  const requestNotificationPermission = () => {
     if (window.NotificationListener) {
-      await window.NotificationListener.requestPermission()
+      window.NotificationListener.requestPermission()
       // 설정 화면 갔다가 돌아오면 자동으로 체크됨 (visibilitychange 이벤트)
     } else {
       alert('이 기능은 Android 앱에서만 사용 가능합니다.')
     }
   }
 
-  const handlePermissionLater = async () => {
+  const handlePermissionLater = () => {
     // "나중에" 선택 시 카운트 증가
     setPermissionCheckCount(prev => prev + 1)
     
