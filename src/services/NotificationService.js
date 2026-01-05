@@ -109,10 +109,14 @@ export const NotificationService = {
   // 즉시 테스트 알림 보내기
   async sendTestNotification(todayTotal, transactionCount) {
     try {
-      const hasPermission = await this.checkPermission()
-      if (!hasPermission) {
-        const granted = await this.requestPermission()
-        if (!granted) return false
+      // 권한 요청 시도 (실패해도 계속 진행)
+      try {
+        const hasPermission = await this.checkPermission()
+        if (!hasPermission) {
+          await this.requestPermission()
+        }
+      } catch (permError) {
+        console.log('Permission check skipped:', permError)
       }
 
       const formattedAmount = new Intl.NumberFormat('ko-KR').format(todayTotal)
@@ -132,6 +136,8 @@ export const NotificationService = {
       return true
     } catch (e) {
       console.error('Failed to send test notification:', e)
+      // 에러 메시지 표시
+      alert('알림을 보내려면 설정 → 앱 → 하루기록 → 알림에서 허용해주세요.')
       return false
     }
   },
