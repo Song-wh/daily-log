@@ -9,9 +9,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.Log;
 import android.webkit.WebView;
 
+import androidx.core.app.NotificationManagerCompat;
+
 import com.getcapacitor.BridgeActivity;
+
+import java.util.Set;
 
 public class MainActivity extends BridgeActivity {
     
@@ -69,17 +74,34 @@ public class MainActivity extends BridgeActivity {
     }
     
     public boolean isNotificationListenerEnabled() {
+        // 방법 1: NotificationManagerCompat 사용 (더 안정적)
+        Set<String> enabledListeners = NotificationManagerCompat.getEnabledListenerPackages(this);
         String pkgName = getPackageName();
+        
+        Log.d("MainActivity", "Package name: " + pkgName);
+        Log.d("MainActivity", "Enabled listeners: " + enabledListeners.toString());
+        
+        if (enabledListeners.contains(pkgName)) {
+            Log.d("MainActivity", "Permission granted via NotificationManagerCompat");
+            return true;
+        }
+        
+        // 방법 2: Settings.Secure 사용 (폴백)
         String flat = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+        Log.d("MainActivity", "enabled_notification_listeners: " + flat);
+        
         if (!TextUtils.isEmpty(flat)) {
             String[] names = flat.split(":");
             for (String name : names) {
                 ComponentName cn = ComponentName.unflattenFromString(name);
                 if (cn != null && TextUtils.equals(pkgName, cn.getPackageName())) {
+                    Log.d("MainActivity", "Permission granted via Settings.Secure");
                     return true;
                 }
             }
         }
+        
+        Log.d("MainActivity", "Permission NOT granted");
         return false;
     }
     
